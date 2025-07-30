@@ -2,34 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import re
-import nltk
 from collections import Counter
 import PyPDF2
 import docx
 import io
 from datetime import datetime
-import base64
 import json
-
-# Download required NLTK data
-@st.cache_resource
-def download_nltk_data():
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt')
-    
-    try:
-        nltk.data.find('corpora/stopwords')
-    except LookupError:
-        nltk.download('stopwords')
-
-download_nltk_data()
-
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize, sent_tokenize
 
 # Page configuration
 st.set_page_config(
@@ -88,7 +67,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Skill categories and keywords
+# Comprehensive skill categories
 SKILL_CATEGORIES = {
     'Programming Languages': [
         'python', 'java', 'javascript', 'c++', 'c#', 'ruby', 'php', 'swift', 'kotlin', 
@@ -174,49 +153,50 @@ def calculate_ats_score(resume_text):
     score = 0
     feedback = []
     
-    # Check for common ATS-friendly elements
+    # Check for resume length
     if len(resume_text) > 200:
-        score += 10
+        score += 15
     else:
-        feedback.append("Resume seems too short")
+        feedback.append("Resume seems too short - aim for 300+ words")
     
     # Check for section headers
-    common_sections = ['experience', 'education', 'skills', 'summary', 'objective']
+    common_sections = ['experience', 'education', 'skills', 'summary', 'objective', 'work', 'employment']
     found_sections = sum(1 for section in common_sections if section in resume_text.lower())
-    score += found_sections * 5
+    score += min(found_sections * 8, 25)
     
     if found_sections < 3:
-        feedback.append("Missing common resume sections")
+        feedback.append("Add standard resume sections: Experience, Education, Skills")
     
-    # Check for contact information patterns
+    # Check for contact information
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
     phone_pattern = r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
     
     if re.search(email_pattern, resume_text):
         score += 10
     else:
-        feedback.append("No email address found")
+        feedback.append("Include your email address")
     
     if re.search(phone_pattern, resume_text):
         score += 10
     else:
-        feedback.append("No phone number found")
+        feedback.append("Include your phone number")
     
-    # Check for dates (experience)
+    # Check for dates (work experience)
     date_pattern = r'\b(19|20)\d{2}\b'
     if re.search(date_pattern, resume_text):
         score += 10
     else:
-        feedback.append("No dates found (work experience)")
+        feedback.append("Add dates to your work experience")
     
     # Check for action verbs
     action_verbs = ['managed', 'developed', 'created', 'implemented', 'led', 'designed', 
-                   'built', 'improved', 'increased', 'reduced', 'achieved']
+                   'built', 'improved', 'increased', 'reduced', 'achieved', 'established',
+                   'coordinated', 'executed', 'optimized', 'delivered']
     found_verbs = sum(1 for verb in action_verbs if verb in resume_text.lower())
-    score += min(found_verbs * 2, 20)
+    score += min(found_verbs * 2, 15)
     
     if found_verbs < 3:
-        feedback.append("Consider using more action verbs")
+        feedback.append("Use more action verbs (managed, developed, created, etc.)")
     
     # Check for quantifiable achievements
     number_pattern = r'\b\d+%?\b'
@@ -224,7 +204,7 @@ def calculate_ats_score(resume_text):
     score += min(numbers_found * 2, 15)
     
     if numbers_found < 3:
-        feedback.append("Add more quantifiable achievements")
+        feedback.append("Add quantified achievements (numbers, percentages, metrics)")
     
     return min(score, 100), feedback
 
@@ -260,7 +240,7 @@ def generate_recommendations(ats_score, match_percentage, skill_gaps, ats_feedba
         recommendations.append({
             'type': 'ATS Optimization',
             'priority': 'High',
-            'recommendation': 'Your resume needs ATS optimization. ' + '; '.join(ats_feedback[:3])
+            'recommendation': f'Improve ATS score: {"; ".join(ats_feedback[:2])}'
         })
     
     # Skill gap recommendations
@@ -268,37 +248,37 @@ def generate_recommendations(ats_score, match_percentage, skill_gaps, ats_feedba
         top_gaps = []
         for category, gaps in skill_gaps.items():
             if gaps:
-                top_gaps.extend(gaps[:2])  # Top 2 gaps per category
+                top_gaps.extend(gaps[:2])
         
         if top_gaps:
             recommendations.append({
                 'type': 'Skill Development',
                 'priority': 'High',
-                'recommendation': f'Focus on learning: {", ".join(top_gaps[:5])}'
+                'recommendation': f'Learn key skills: {", ".join(top_gaps[:4])}'
             })
     
-    # General recommendations
+    # Additional recommendations
     recommendations.extend([
         {
             'type': 'Content Enhancement',
             'priority': 'Medium',
-            'recommendation': 'Add more quantifiable achievements with specific numbers and percentages'
+            'recommendation': 'Add quantified achievements with specific numbers and results'
         },
         {
             'type': 'Keywords',
             'priority': 'Medium',
-            'recommendation': 'Include more industry-specific keywords from the job description'
+            'recommendation': 'Include more industry keywords from the job posting'
         },
         {
             'type': 'Format',
             'priority': 'Low',
-            'recommendation': 'Ensure consistent formatting and use standard section headers'
+            'recommendation': 'Use consistent formatting and clear section headers'
         }
     ])
     
-    return recommendations[:5]  # Return top 5 recommendations
+    return recommendations[:5]
 
-# Main App
+# Main application
 def main():
     st.markdown('<h1 class="main-header">🎯 SkillMirror</h1>', unsafe_allow_html=True)
     st.markdown('<p style="text-align: center; font-size: 1.2rem; color: #666;">AI-Powered Resume Analysis & Career Feedback</p>', unsafe_allow_html=True)
@@ -308,179 +288,146 @@ def main():
         st.header("📋 How to Use")
         st.markdown("""
         1. **Upload your resume** (PDF or DOCX)
-        2. **Paste the job description** you're applying for
-        3. **Get instant AI feedback** on:
+        2. **Paste the job description**
+        3. **Get instant AI feedback** including:
            - ATS compatibility score
            - Skill matching analysis
            - Personalized recommendations
-           - Career insights
         """)
         
-        st.header("🎯 Features")
+        st.header("🎯 Analysis Features")
         st.markdown("""
-        - **ATS Score Analysis**
-        - **Skill Gap Identification**
-        - **Job Match Percentage**
-        - **Interactive Visualizations**
-        - **Actionable Recommendations**
+        - **ATS Score** (0-100)
+        - **Job Match** percentage
+        - **Skill Gap** identification
+        - **Visual Analytics**
+        - **Export Results**
         """)
+        
+        st.info("💡 **Tip**: Use recent job postings for best results!")
     
-    # Main content area
+    # Main content
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.header("📄 Upload Your Resume")
+        st.header("📄 Upload Resume")
         uploaded_file = st.file_uploader(
             "Choose your resume file",
             type=['pdf', 'docx'],
-            help="Upload your resume in PDF or DOCX format"
+            help="Upload PDF or DOCX format"
         )
         
         resume_text = ""
         if uploaded_file is not None:
             if uploaded_file.type == "application/pdf":
                 resume_text = extract_text_from_pdf(uploaded_file)
-            elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            else:
                 resume_text = extract_text_from_docx(uploaded_file)
             
             if resume_text:
-                st.success(f"✅ Resume uploaded successfully! ({len(resume_text)} characters)")
+                st.success(f"✅ Resume loaded! ({len(resume_text)} characters)")
                 with st.expander("Preview Resume Text"):
-                    st.text_area("Resume Content", resume_text[:1000] + "..." if len(resume_text) > 1000 else resume_text, height=200, disabled=True)
+                    st.text_area("Content Preview", resume_text[:500] + "..." if len(resume_text) > 500 else resume_text, height=150, disabled=True)
     
     with col2:
         st.header("💼 Job Description")
         job_description = st.text_area(
-            "Paste the job description here",
+            "Paste the complete job description",
             height=300,
-            placeholder="Paste the full job description including requirements, responsibilities, and preferred qualifications..."
+            placeholder="Paste the full job posting here, including requirements, responsibilities, and qualifications..."
         )
     
-    # Analysis button
-    if st.button("🔍 Analyze Resume", type="primary", use_container_width=True):
+    # Analysis section
+    if st.button("🔍 Analyze My Resume", type="primary", use_container_width=True):
         if not resume_text:
-            st.error("Please upload a resume first!")
-        elif not job_description:
-            st.error("Please paste a job description!")
+            st.error("❌ Please upload your resume first!")
+        elif not job_description.strip():
+            st.error("❌ Please paste the job description!")
         else:
-            with st.spinner("Analyzing your resume..."):
-                # Extract skills
+            with st.spinner("🤖 Analyzing your resume..."):
+                # Perform analysis
                 resume_skills = extract_skills(resume_text, SKILL_CATEGORIES)
-                
-                # Calculate ATS score
                 ats_score, ats_feedback = calculate_ats_score(resume_text)
-                
-                # Analyze job match
                 skill_matches, skill_gaps, match_percentage = analyze_job_match(resume_skills, job_description)
-                
-                # Generate recommendations
                 recommendations = generate_recommendations(ats_score, match_percentage, skill_gaps, ats_feedback)
             
-            st.success("Analysis complete! 🎉")
+            st.success("✅ Analysis Complete!")
             
-            # Display results
-            st.header("📊 Analysis Results")
+            # Results display
+            st.header("📊 Your Analysis Results")
             
             # Key metrics
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.metric(
-                    label="ATS Compatibility Score",
-                    value=f"{ats_score}/100",
-                    delta=f"{'Good' if ats_score >= 70 else 'Needs Improvement'}"
-                )
+                score_color = "🟢" if ats_score >= 70 else "🟡" if ats_score >= 50 else "🔴"
+                st.metric("ATS Score", f"{ats_score}/100", delta=f"{score_color}")
             
             with col2:
-                st.metric(
-                    label="Job Match Percentage",
-                    value=f"{match_percentage:.1f}%",
-                    delta=f"{'Strong Match' if match_percentage >= 60 else 'Moderate Match' if match_percentage >= 40 else 'Weak Match'}"
-                )
+                match_color = "🟢" if match_percentage >= 60 else "🟡" if match_percentage >= 40 else "🔴"
+                st.metric("Job Match", f"{match_percentage:.1f}%", delta=f"{match_color}")
             
             with col3:
                 total_skills = sum(len(skills) for skills in resume_skills.values())
-                st.metric(
-                    label="Skills Identified",
-                    value=str(total_skills),
-                    delta="From your resume"
-                )
+                st.metric("Skills Found", total_skills, delta="📝")
             
             # Visualizations
             st.header("📈 Visual Analysis")
             
-            # Skills comparison chart
             col1, col2 = st.columns(2)
             
             with col1:
-                # Skill matches by category
-                match_data = []
+                # Skills match chart
+                chart_data = []
                 for category in SKILL_CATEGORIES.keys():
                     matches = len(skill_matches.get(category, []))
                     gaps = len(skill_gaps.get(category, []))
                     if matches > 0 or gaps > 0:
-                        match_data.append({
-                            'Category': category,
-                            'Matches': matches,
-                            'Gaps': gaps
-                        })
+                        chart_data.append({'Category': category, 'Matches': matches, 'Gaps': gaps})
                 
-                if match_data:
-                    df_matches = pd.DataFrame(match_data)
+                if chart_data:
+                    df = pd.DataFrame(chart_data)
                     fig = px.bar(
-                        df_matches.melt(id_vars=['Category'], var_name='Type', value_name='Count'),
-                        x='Category',
-                        y='Count',
-                        color='Type',
-                        title='Skill Matches vs Gaps by Category',
-                        color_discrete_map={'Matches': '#4CAF50', 'Gaps': '#f44336'}
+                        df.melt(id_vars=['Category'], var_name='Type', value_name='Count'),
+                        x='Category', y='Count', color='Type',
+                        title='Skills: Matches vs Gaps',
+                        color_discrete_map={'Matches': '#4CAF50', 'Gaps': '#FF5722'}
                     )
                     fig.update_xaxis(tickangle=45)
                     st.plotly_chart(fig, use_container_width=True)
             
             with col2:
-                # ATS score breakdown (simulate components)
-                ats_components = {
-                    'Contact Information': min(20, ats_score * 0.2),
-                    'Section Structure': min(25, ats_score * 0.25),
-                    'Keywords': min(30, ats_score * 0.3),
-                    'Formatting': min(25, ats_score * 0.25)
-                }
+                # Score breakdown
+                categories = ['Contact Info', 'Structure', 'Keywords', 'Achievements']
+                scores = [20, 25, 30, 25]  # Simulated breakdown
+                actual_scores = [min(s, ats_score/4) for s in scores]
                 
                 fig = go.Figure(data=[
-                    go.Bar(
-                        x=list(ats_components.keys()),
-                        y=list(ats_components.values()),
-                        marker_color='#4CAF50'
-                    )
+                    go.Bar(x=categories, y=actual_scores, marker_color='#2196F3')
                 ])
-                fig.update_layout(
-                    title='ATS Score Breakdown',
-                    yaxis_title='Score',
-                    showlegend=False
-                )
+                fig.update_layout(title='ATS Score Breakdown', yaxis_title='Points')
                 st.plotly_chart(fig, use_container_width=True)
             
             # Detailed skill analysis
-            st.header("🎯 Skill Analysis")
+            st.header("🎯 Detailed Skill Analysis")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("✅ Matching Skills")
+                st.subheader("✅ Skills You Have")
                 for category, matches in skill_matches.items():
                     if matches:
                         st.write(f"**{category}:**")
-                        for skill in matches:
+                        for skill in matches[:5]:  # Show top 5
                             st.markdown(f'<span class="skill-match">{skill}</span>', unsafe_allow_html=True)
                         st.write("")
             
             with col2:
-                st.subheader("❌ Missing Skills")
+                st.subheader("❌ Skills You Need")
                 for category, gaps in skill_gaps.items():
                     if gaps:
                         st.write(f"**{category}:**")
-                        for skill in gaps:
+                        for skill in gaps[:5]:  # Show top 5
                             st.markdown(f'<span class="skill-gap">{skill}</span>', unsafe_allow_html=True)
                         st.write("")
             
@@ -488,79 +435,71 @@ def main():
             st.header("💡 Personalized Recommendations")
             
             for i, rec in enumerate(recommendations, 1):
-                priority_color = {
-                    'High': '#f44336',
-                    'Medium': '#ff9800',
-                    'Low': '#4CAF50'
-                }
+                priority_icons = {'High': '🔥', 'Medium': '⚡', 'Low': '💡'}
+                icon = priority_icons.get(rec['priority'], '📝')
                 
                 st.markdown(f"""
                 <div class="recommendation-box">
-                    <h4>#{i} {rec['type']} 
-                    <span style="color: {priority_color[rec['priority']]}; font-size: 0.8em;">
-                    [{rec['priority']} Priority]
-                    </span></h4>
+                    <h4>{icon} {rec['type']} ({rec['priority']} Priority)</h4>
                     <p>{rec['recommendation']}</p>
                 </div>
                 """, unsafe_allow_html=True)
             
-            # ATS Feedback
+            # ATS feedback
             if ats_feedback:
-                st.header("⚠️ ATS Optimization Tips")
-                for feedback in ats_feedback:
+                st.header("⚠️ ATS Improvement Tips")
+                for tip in ats_feedback[:3]:
                     st.markdown(f"""
                     <div class="warning-box">
-                        <p>⚡ {feedback}</p>
+                        <p>💡 {tip}</p>
                     </div>
                     """, unsafe_allow_html=True)
             
             # Export results
-            st.header("📥 Export Results")
+            st.header("📥 Export Your Analysis")
             
-            # Prepare data for export
-            results_data = {
-                'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            # Prepare export data
+            export_data = {
+                'timestamp': datetime.now().isoformat(),
                 'ats_score': ats_score,
-                'match_percentage': match_percentage,
-                'skill_matches': skill_matches,
-                'skill_gaps': skill_gaps,
+                'match_percentage': round(match_percentage, 1),
+                'total_skills_found': sum(len(skills) for skills in resume_skills.values()),
                 'recommendations': recommendations,
-                'ats_feedback': ats_feedback
+                'top_skill_gaps': [skill for gaps in list(skill_gaps.values())[:3] for skill in gaps[:2]]
             }
             
             col1, col2 = st.columns(2)
             
             with col1:
-                # JSON export
-                json_data = json.dumps(results_data, indent=2)
+                json_export = json.dumps(export_data, indent=2)
                 st.download_button(
-                    label="📄 Download Analysis (JSON)",
-                    data=json_data,
-                    file_name=f"skillmirror_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                    mime="application/json"
+                    "📊 Download Analysis (JSON)",
+                    json_export,
+                    f"skillmirror_analysis_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                    "application/json"
                 )
             
             with col2:
-                # Summary report
-                summary_report = f"""
+                # Text summary
+                summary = f"""
 SKILLMIRROR ANALYSIS REPORT
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-=== SUMMARY ===
-ATS Compatibility Score: {ats_score}/100
-Job Match Percentage: {match_percentage:.1f}%
-Total Skills Identified: {sum(len(skills) for skills in resume_skills.values())}
+SUMMARY:
+• ATS Score: {ats_score}/100
+• Job Match: {match_percentage:.1f}%
+• Skills Found: {sum(len(skills) for skills in resume_skills.values())}
 
-=== TOP RECOMMENDATIONS ===
+TOP RECOMMENDATIONS:
 """
                 for i, rec in enumerate(recommendations[:3], 1):
-                    summary_report += f"{i}. [{rec['priority']}] {rec['type']}: {rec['recommendation']}\n"
+                    summary += f"{i}. {rec['type']}: {rec['recommendation']}\n"
                 
                 st.download_button(
-                    label="📝 Download Summary Report",
-                    data=summary_report,
-                    file_name=f"skillmirror_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                    mime="text/plain"
+                    "📝 Download Summary",
+                    summary,
+                    f"skillmirror_summary_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                    "text/plain"
                 )
 
 if __name__ == "__main__":
